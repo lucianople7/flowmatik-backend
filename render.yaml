@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: flowmatik-backend
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+    healthCheckPath: /health
+    
+databases:
+  - name: flowmatik-db
+    databaseName: flowmatik
+    user: flowmatik
+    plan: free
+
