@@ -1,0 +1,65 @@
+# Railway-optimized Dockerfile for Flowmatik Backend
+FROM node:18-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production && npm cache clean --force
+
+# Build stage
+FROM base AS builder
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM base AS runner
+WORKDIR /app
+
+# Don't run as root
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 flowmatik
+
+# Copy built application
+COPY --from=builder --chown=flowmatik:nodejs /app/dist ./dist
+COPY --from=builder --chown=flowmatik:nodejs /app/package*.json ./
+
+# Copy production dependencies
+COPY --from=deps --chown=flowmatik:nodejs /app/node_modules ./node_modules
+
+# Create necessary directories
+RUN mkdir -p logs uploads temp && chown -R flowmatik:nodejs logs uploads temp
+
+# Switch to non-root user
+USER flowmatik
+
+# Expose port (Railway will set PORT env var)
+EXPOSE $PORT
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:' + process.env.PORT + '/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+
+# Start the application
+CMD ["npm", "run", "start:prod"]
+
+# Labels
+LABEL maintainer="Flowmatik Team <team@flowmatik.co>"
+LABEL version="1.0.0"
+LABEL description="Flowmatik Backend - Railway Deployment"
+
